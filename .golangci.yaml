@@ -1,7 +1,8 @@
 # All settings can be found here https://github.com/golangci/golangci-lint/blob/HEAD/.golangci.reference.yml
 version: "2"
-# golangci-lint configuration for the climax project.
-# Enforces the guidelines in rules.md and spec.md.
+# golangci-lint configuration for 2fa.
+# Adopted from the climax project; the rules.md and spec.md references below
+# point at the guidelines there that each setting enforces.
 
 formatters:
   enable:
@@ -261,27 +262,17 @@ linters:
       extra-ignore-sigs:
       - .Errorf(
       - fmt.Errorf(
-      # toerr's message-wrapping constructor: wraps the cause (Unwrap chain
-      # preserved) plus a message and trace frame — a genuine wrap, so wrapcheck
-      # should treat it like the built-in .Wrap(/.WithMessage( it already allows.
-      - .WrapWithMessage(
-      # toerr's coded constructor: carries a status *and* the cause, whose Unwrap
-      # chain it preserves — so `errors.Is`/`As` reach through it exactly as they
-      # reach through .WrapWithMessage(. Registered for the same reason and not to
-      # quieten anything: skillet registers both, and gnosis had only the first
-      # because until now it classified with a struct literal instead.
-      - .WithCode(
     # ── depguard ─────────────────────────────────────────────────────────────
-    # spec.md: climax uses its own command pattern; no third-party CLI frameworks.
+    # spec.md: use the standard library flag package; no third-party CLI frameworks.
     # rules.md: use stdlib testing only; no third-party test frameworks.
     depguard:
       rules:
         no-cli-frameworks:
           deny:
           - pkg: "github.com/spf13/cobra"
-            desc: "climax uses its own command pattern; do not import cobra"
+            desc: "use the standard library flag package; do not import cobra"
           - pkg: "github.com/urfave/cli"
-            desc: "climax uses its own command pattern; do not import urfave/cli"
+            desc: "use the standard library flag package; do not import urfave/cli"
           - pkg: "github.com/spf13/pflag"
             desc: "use the standard library flag package"
           - pkg: "github.com/spf13/viper"
@@ -303,51 +294,6 @@ linters:
             desc: "use stdlib testing; gomock is banned — rules.md"
           - pkg: "go.uber.org/mock"
             desc: "use stdlib testing; uber-mock is banned — rules.md"
-        # summary_rules §1 forbids a domain package from importing application
-        # packages, and forbids sibling subpackages from importing each other.
-        # Both are enforced here rather than by review, per §15 ("enforce them
-        # with linters, not human vigilance").
-        #
-        # internal/benchgate is the domain: the pure core. It holds the parsing,
-        # the statistical comparison, gap classification and the renderers, and it
-        # reaches nothing outside the standard library and golang.org/x/perf.
-        domain-is-pure:
-          # "!$test" excludes _test.go: the external test package (benchgate_test)
-          # may import whatever a test needs. The rule constrains production code,
-          # which is where the layering claim actually lives.
-          files:
-          - "**/internal/benchgate/**"
-          - "!$test"
-          deny:
-          - pkg: "os/exec"
-            desc: "the domain is pure; running commands belongs in internal/gotest or internal/gitwork — summary_rules §5"
-          - pkg: "os"
-            desc: "the domain takes io.Reader/io.Writer from the shell and never touches the filesystem — summary_rules §5"
-          - pkg: "github.com/StevenACoffman/benchgate/internal/gotest"
-            desc: "the domain must not depend on an adapter; the adapter depends on the domain — summary_rules §1"
-          - pkg: "github.com/StevenACoffman/benchgate/internal/gitwork"
-            desc: "the domain must not depend on an adapter; the adapter depends on the domain — summary_rules §1"
-          - pkg: "github.com/StevenACoffman/benchgate/internal/gate"
-            desc: "internal/gate is the shell above the domain; it imports the domain, never the reverse — summary_rules §1"
-          - pkg: "github.com/StevenACoffman/benchgate/cmd"
-            desc: "the domain must not depend on command infrastructure — summary_rules §1"
-        # The layers are: internal/benchgate (domain) <- internal/gotest and
-        # internal/gitwork (adapters, one per external dependency) <-
-        # internal/gate (the composition shell) <- cmd/*. Each layer may import
-        # the ones beneath it and never its own siblings. internal/gate is
-        # excluded because composing the adapters is precisely its job.
-        adapters-do-not-import-each-other:
-          files:
-          - "!$test"
-          - "**/internal/gotest/**"
-          - "**/internal/gitwork/**"
-          deny:
-          - pkg: "github.com/StevenACoffman/benchgate/internal/gotest"
-            desc: "adapters import internal/benchgate only, never each other; internal/gate is what composes them — summary_rules §1"
-          - pkg: "github.com/StevenACoffman/benchgate/internal/gitwork"
-            desc: "adapters import internal/benchgate only, never each other; internal/gate is what composes them — summary_rules §1"
-          - pkg: "github.com/StevenACoffman/benchgate/internal/gate"
-            desc: "internal/gate is the shell above the adapters; it imports them, never the reverse — summary_rules §1"
     # ── forbidigo ────────────────────────────────────────────────────────────
     # spec.md: commands write to cmd.Stdout/cmd.Stderr; only main may call os.Exit.
     # rules.md: use flag.NewFlagSet, never flag.Parse; no time.Sleep in tests; no t.Setenv.
@@ -364,7 +310,7 @@ linters:
       - pattern: "^log\\.(Print|Fatal|Panic|New|Default|SetOutput|SetFlags|SetPrefix)"
         msg: "return errors instead of calling log.Fatal/Panic; do not configure the global logger"
       - pattern: "^flag\\.Parse$"
-        msg: "use ff.NewFlagSet scoped to the command; never call flag.Parse directly"
+        msg: "use a flag.NewFlagSet scoped to the command; never call flag.Parse directly"
       - pattern: "^flag\\.ExitOnError$"
         msg: "use flag.ContinueOnError; ExitOnError calls os.Exit on parse failure — spec.md"
       - pattern: "^flag\\.PanicOnError$"
@@ -483,33 +429,10 @@ linters:
       linters:
       - forbidigo
       text: "os\\.Exit"
-    # cmd/<name>/<name>.go: spec.md mandates that exec() is the single function
-    # that handles all command logic. Flag combinations, path resolution, and error
-    # handling are intentionally concentrated here — splitting would require threading
-    # state through helpers with no reduction in overall branch count.
-    - path: cmd/[^/]+/[^/]+\.go$
-      linters:
-      - cyclop
-    # cmd/version/version.go: var Version must be a var (not const) so that
-    # -ldflags "-X .../cmd/version.Version=v1.2.3" can override it at link time.
-    # gochecknoglobals does not understand this idiom.
-    - path: cmd/version/version\.go$
-      linters:
-      - gochecknoglobals
-    # main.go: os.Exit(exitFail) is the correct and only call site.
+    # main.go: main() is the one place that calls os.Exit.
     - path: main\.go$
       linters:
       - forbidigo
-    # cmd/cmd.go dispatcher writes to io.Writer locals, not global stdout.
-    - path: cmd/cmd\.go$
-      linters:
-      - forbidigo
-    # cmd/cmd.go dispatcher must pass command errors through unwrapped; wrapping
-    # would prepend context to every command error, violating the spec's
-    # "<command>: <reason>" format.
-    - path: cmd/cmd\.go$
-      linters:
-      - wrapcheck
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

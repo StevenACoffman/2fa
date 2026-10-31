@@ -41,7 +41,7 @@ commit-msg:
       if printf '%s' "$subject" | grep -Eq '^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)(\([^)]*\))?!?:'; then
           echo "commit message: this repository uses scope-first subjects, not Conventional Commits." >&2
           echo "  got:  $subject" >&2
-          echo "  want: 'compare: honour the better= unit metadata' or 'ci: add the perf job'" >&2
+          echo "  want: '2fa: add -export flag' or 'ci: pin actions to commit SHAs'" >&2
           exit 1
       fi
       if [ "${#subject}" -gt 72 ]; then

@@ -40,22 +40,11 @@ builds:
   - arm64
   - amd64
   - "386"
-  # Building through the proxy (gomod.proxy, below) produces a binary like
-  # `go install module@version` does: the build info has the tag and module sum
-  # but no VCS stamps. These link-time values put back what the proxy strips;
-  # cmd/version prefers each one over build info when it is set.
-  #
-  # .Tag, not .Version: .Version drops the "v", and `go install` reports the
-  # tag with it. Every target must exist in cmd/version — the linker silently
-  # ignores -X for a missing variable, so check `benchgate version` after
-  # changing these.
+  # No -X flags: 2fa has no version variable. Building through the proxy
+  # (gomod.proxy, below) records the tag and module sum in the build info,
+  # which `go version -m 2fa` prints.
   ldflags:
   - -s -w
-  - -X {{ .ModulePath }}/cmd/version.Version={{ .Tag }}
-  - -X {{ .ModulePath }}/cmd/version.Commit={{ .FullCommit }}
-  - -X {{ .ModulePath }}/cmd/version.CommitDate={{ .CommitDate }}
-  - -X {{ .ModulePath }}/cmd/version.TreeState={{ .GitTreeState }}
-  - -X {{ .ModulePath }}/cmd/version.BuiltBy=goreleaser
   # Pin the binary mtime to the commit so repeated builds of one tag are
   # byte-identical.
   mod_timestamp: "{{ .CommitTimestamp }}"

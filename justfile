@@ -24,11 +24,6 @@ test-cover:
     go tool cover -func=coverage.out | tail -1
     @echo "HTML report: go tool cover -html=coverage.out"
 
-# Refresh the committed golden files for the renderers, then show the diff to review
-update-golden:
-    go test ./internal/2fa/ -update
-    git diff --stat -- internal/2fa/testdata
-
 # Run golangci-lint over the repository
 lint:
     golangci-lint run ./...
@@ -53,44 +48,30 @@ tidy-check:
     echo "go.mod and go.sum are tidy"
 
 # Mutation testing asks what coverage cannot: not "did a test execute this line?"
-# but "would any test have noticed if it behaved differently?". Scoped to the
-# pure core, because the shells are proven by the subprocess and end-to-end
-# suites, which a mutation run does not execute.
+# but "would any test have noticed if it behaved differently?".
 #
-# --config is passed explicitly rather than left to discovery. Whether mutago
-# finds a `.mutago.yaml` on its own was not something we could establish: it
-# runs happily on a deliberately corrupt config file under either spelling, so
-# a file it silently ignores is indistinguishable from one it honoured. Naming
-# the path here replaces that question with a check, because a wrong path is a
-# hard "Could not read config file" rather than a default-config run that looks
-# exactly like a configured one.
+# --config is passed explicitly rather than left to discovery, so a wrong path
+# is a hard "Could not read config file" rather than a silent default-config run.
 #
-# The threshold is 85 against a measured 88.89%, which leaves room for a change
-# to add a line or two without turning the gate red on arrival. 100% is not
-# reachable: the tail is equivalent mutants, which alter the source without
-# altering behaviour and so cannot be killed by any test. `sign(0)` is one —
-# percentChange only calls it with a non-zero argument, so `f < 0` and `f <= 0`
-# are the same function. strconv.ParseFloat's bitSize is another: anything that
-# is not 32 behaves as 64.
+# The threshold defaults to 0 because the package has no meaningful tests yet;
+# raise it to just below the measured score as tests are added.
 #
-# Mutation-test the pure core; fails below the threshold (exit code 4)
-mutate threshold="85":
-    mutago --config=.mutago.yaml --min-msi={{threshold}} --quiet --no-diffs ./internal/2fa/
+# Mutation-test the package; fails below the threshold (exit code 4)
+mutate threshold="0":
+    mutago --config=.mutago.yaml --min-msi={{threshold}} --quiet --no-diffs .
 
-# Mutation-test the pure core and show the diff for every surviving mutant
+# Mutation-test the package and show the diff for every surviving mutant
 mutate-report:
-    mutago --config=.mutago.yaml --html-output ./internal/2fa/
+    mutago --config=.mutago.yaml --html-output .
     @echo "wrote mutago-report.html"
 
 # Format and lint the Markdown, then check the prose. vale is advisory here:
 # its local verdict depends on whatever global config the developer has, and a
 # gate that answers differently per machine is not one worth failing a build on.
 docs:
-    rumdl fmt README.md TODO.md _example/README.md
-    rumdl check README.md TODO.md _example/README.md
-    # TODO.md trips proselint.Annotations on its own heading, which is the rule
-    # working as intended on a file whose subject is the word it flags.
-    -vale README.md TODO.md _example/README.md
+    rumdl fmt README.md
+    rumdl check README.md
+    -vale README.md
 
 # --strict-collection is the flag that matters here. Without it, a workflow
 # zizmor cannot parse produces a WARN and is skipped, so a broken file reads as
@@ -106,16 +87,5 @@ actions:
 vulncheck:
     govulncheck ./...
 
-# Build, lint and test the nested _example module. The leading underscore keeps
-# the Go tool from walking into it from the root module, so it needs its own
-# invocation — it is never covered by `./...` above.
-example:
-    cd _example && go build ./... && go test -count=1 ./... && golangci-lint run ./...
-
-# Dogfood: gate _example against its own git history. This is the same command
-# CI runs, and the reason the CI path cannot rot unnoticed.
-example-gate base="HEAD~1": build
-    ./bin/2fa check --dir _example --base {{base}} --format text
-
 # Every gate CI runs on a pull request
-check: tidy-check lint test vulncheck actions example
+check: tidy-check lint test vulncheck actions
