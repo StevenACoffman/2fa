@@ -2,7 +2,7 @@
 
 Usage:
 
-    go install rsc.io/2fa@latest
+    go install github.com/StevenACoffman/2fa@latest
 
     2fa -add [-7] [-8] [-hotp] name
     2fa -list

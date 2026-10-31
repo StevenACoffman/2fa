@@ -6,4 +6,4 @@ package main
 
 import "testing"
 
-func Test(t *testing.T) {}
+func Test(_ *testing.T) {}
